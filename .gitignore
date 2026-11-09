@@ -1,1 +1,3 @@
-maven-install-plugin-2.3.1-source-release.zip
+*.tar.gz
+*.zip
+*.jar

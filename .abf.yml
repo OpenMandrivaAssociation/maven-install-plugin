@@ -1,2 +1,4 @@
 sources:
+  maven-install-plugin-3.2.0.tar.gz: 332f2014615e225dd830f4b203b45770b5f89f02
+removed_sources:
   maven-install-plugin-2.5-source-release.zip: 4c997aa314cd6dee54c4f44caf23b2ed4bca5e5c

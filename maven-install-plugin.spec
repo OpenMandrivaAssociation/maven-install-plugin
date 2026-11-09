@@ -1,140 +1,107 @@
-%{?_javapackages_macros:%_javapackages_macros}
-Name:           maven-install-plugin
-Version:        2.5
-Release:        1.0%{?dist}
-Summary:        Maven Install Plugin
+Name:		maven-install-plugin
+Version:	3.2.0
+Release:	1
+Summary:	Copies project artifacts to the local repository
+Group:		Development/Java
+License:	Apache-2.0
+URL:		https://maven.apache.org/plugins/maven-install-plugin/
+Source0:	https://github.com/apache/maven-install-plugin/archive/refs/tags/maven-install-plugin-%{version}.tar.gz#/maven-install-plugin-%{version}.tar.gz
+BuildArch:	noarch
+BuildRequires:	python
+BuildRequires:	maven
+BuildRequires:	maven-components >= 3.10.0
+BuildRequires:	java-current-devel
+# Generates META-INF/maven/plugin.xml. The separate annotations package
+# conflicts with maven-components on the same index file.
+BuildRequires:	maven-plugin-tools
+BuildRequires:	mvn(org.apache.maven.plugins:maven-plugin-plugin)
+# plexus-xml is not packaged. The pull-parser exception used here is
+# still in plexus-utils 3.6.2.
+BuildRequires:	mvn(org.codehaus.plexus:plexus-utils)
+BuildRequires:	plexus-utils >= 3.6.2
+Requires:	plexus-utils >= 3.6.2
+BuildRequires:	mvn(org.apache.maven:maven-plugin-api)
+BuildRequires:	mvn(org.apache.maven:maven-artifact)
+BuildRequires:	mvn(org.apache.maven:maven-core)
+BuildRequires:	mvn(org.apache.maven:maven-model)
+BuildRequires:	mvn(org.apache.maven.resolver:maven-resolver-api)
+BuildRequires:	mvn(org.apache.maven.resolver:maven-resolver-util)
+BuildRequires:	mvn(javax.inject:javax.inject)
+# javax.inject and jakarta-inject both provide this coordinate.
+BuildRequires:	javax.inject >= 1-2
+Requires:	javax.inject >= 1-2
+BuildRequires:	mvn(org.slf4j:slf4j-api)
+BuildRequires:	mvn(org.apache.maven.plugin-tools:maven-plugin-annotations)
+BuildSystem:	maven
+BuildOption(install):	--file-name %{name}
 
-
-License:        ASL 2.0
-URL:            https://maven.apache.org/plugins/maven-install-plugin
-Source0:        http://repo2.maven.org/maven2/org/apache/maven/plugins/%{name}/%{version}/%{name}-%{version}-source-release.zip
-
-BuildArch:      noarch
-
-BuildRequires: java-devel >= 1:1.6.0
-BuildRequires: maven-local
-BuildRequires: maven-plugin-plugin
-BuildRequires: maven-resources-plugin
-BuildRequires: maven-plugin-testing-harness
-BuildRequires: plexus-utils
-BuildRequires: maven-archiver
-BuildRequires: mvn(org.apache.maven:maven-artifact:2.0.6)
-BuildRequires: mvn(org.apache.maven:maven-model:2.0.6)
-BuildRequires: mvn(commons-codec:commons-codec)
-BuildRequires: mvn(org.apache.maven.shared:maven-shared-utils)
-
-Requires: maven
-Requires: jpackage-utils
-Requires: java
-Requires: maven-archiver
-Requires: plexus-digest
-Requires: mvn(org.apache.maven:maven-artifact:2.0.6)
-Requires: mvn(org.apache.maven:maven-model:2.0.6)
-
-Provides:       maven2-plugin-install = %{version}-%{release}
-Obsoletes:      maven2-plugin-install <= 0:2.0.8
+Obsoletes:	maven2-plugin-install <= 0:2.0.8
+Provides:	maven2-plugin-install = %{EVRD}
+Obsoletes:	maven-install-plugin-javadoc < %{EVRD}
 
 %description
-Copies the project artifacts to the user's local repository.
-
-%package javadoc
-
-Summary:        Javadoc for %{name}
-Requires:       jpackage-utils
-
-%description javadoc
-API documentation for %{name}.
-
+Copies the project's artifacts into the local repository. 3.x installs
+through Maven Resolver, can defer installation until the end of a
+multi-module build, and can install an incomplete project. 3.2.0
+caches the reactor scan and checks an embedded POM in install-file
+before trusting it. 4.0.0 is still a beta, so this package stays on
+3.2.0. Tests need JUnit Jupiter, so they are not run.
 
 %prep
-%setup -q
-# maven-core has scope "provided" in Plugin Testing Harness, so we
-# need to provide it or tests will fail to compile.  This works for
-# upstream because upstream uses a different version of Plugin Testing
-# Harness in which scope of maven-core dependency is "compile".
-%pom_add_dep org.apache.maven:maven-core::test
+%autosetup -n maven-install-plugin-maven-install-plugin-%{version}
+rm -rf src/test src/it .github
+python - <<'PY'
+import xml.etree.ElementTree as ET
+NS = "http://maven.apache.org/POM/4.0.0"
+ET.register_namespace("", NS)
 
-%build
-%mvn_build -f
+def tag(name):
+    return "{" + NS + "}" + name
 
-%install
-%mvn_install
+def add(parent, name, text):
+    node = ET.SubElement(parent, tag(name))
+    node.text = text
+    return node
+
+root = ET.Element(tag("project"))
+add(root, "modelVersion", "4.0.0")
+add(root, "groupId", "org.apache.maven.plugins")
+add(root, "artifactId", "maven-install-plugin")
+add(root, "version", "%{version}")
+add(root, "packaging", "maven-plugin")
+add(root, "name", "Apache Maven Install Plugin")
+props = ET.SubElement(root, tag("properties"))
+add(props, "maven.compiler.release", "8")
+add(props, "project.build.sourceEncoding", "UTF-8")
+deps = ET.SubElement(root, tag("dependencies"))
+items = (
+    ("org.codehaus.plexus", "plexus-utils", "3.6.2", None),
+    ("org.apache.maven", "maven-plugin-api", "3.10.0", "provided"),
+    ("org.apache.maven", "maven-artifact", "3.10.0", "provided"),
+    ("org.apache.maven", "maven-core", "3.10.0", "provided"),
+    ("org.apache.maven", "maven-model", "3.10.0", "provided"),
+    ("org.apache.maven.resolver", "maven-resolver-api", "2.0.24", "provided"),
+    ("org.apache.maven.resolver", "maven-resolver-util", "2.0.24", "provided"),
+    ("javax.inject", "javax.inject", "1", "provided"),
+    ("org.slf4j", "slf4j-api", "1.7.36", "provided"),
+    ("org.apache.maven.plugin-tools", "maven-plugin-annotations", "3.15.2", "provided"),
+)
+for group, artifact, version, scope in items:
+    dep = ET.SubElement(deps, tag("dependency"))
+    add(dep, "groupId", group)
+    add(dep, "artifactId", artifact)
+    add(dep, "version", version)
+    if scope:
+        add(dep, "scope", scope)
+build = ET.SubElement(root, tag("build"))
+plugins = ET.SubElement(build, tag("plugins"))
+plugin = ET.SubElement(plugins, tag("plugin"))
+add(plugin, "groupId", "org.apache.maven.plugins")
+add(plugin, "artifactId", "maven-plugin-plugin")
+# The lifecycle binding asks for 3.15.1. The packaged plugin is 3.16.0.
+add(plugin, "version", "3.16.0")
+ET.ElementTree(root).write("pom.xml", encoding="utf-8", xml_declaration=True)
+PY
 
 %files -f .mfiles
-%doc LICENSE NOTICE
-
-%files javadoc -f .mfiles-javadoc
-%doc LICENSE NOTICE
-
-%changelog
-* Tue Sep 10 2013 Mikolaj Izdebski <mizdebsk@redhat.com> - 2.5-1
-- Update to upstream version 2.5
-
-* Wed Aug 07 2013 Stanislav Ochotnicky <sochotnicky@redhat.com> - 2.4-6
-- Update to latest packaging guidelines
-
-* Sat Aug 03 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.4-5
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_20_Mass_Rebuild
-
-* Mon Mar 11 2013 Mikolaj Izdebski <mizdebsk@redhat.com> - 2.4-2
-- Add missing requires on maven2 artifact and model
-- Add maven-core to test dependencies
-- Resolves: rhbz#914169
-
-* Thu Feb 14 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.4-3
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_19_Mass_Rebuild
-
-* Wed Feb 06 2013 Java SIG <java-devel@lists.fedoraproject.org> - 2.4-2
-- Update for https://fedoraproject.org/wiki/Fedora_19_Maven_Rebuild
-- Replace maven BuildRequires with maven-local
-
-* Sat Jan 07 2013 David Xie <david.scriptfan@gmail.com> - 2.4-1
-- Upgrade to 2.4
-
-* Mon Dec 10 2012 Weinan Li <weli@redhat.com> - 2.3.1-7
-- Install license files
-
-* Thu Jul 19 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.3.1-6
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_18_Mass_Rebuild
-
-* Fri Jan 13 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.3.1-5
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_17_Mass_Rebuild
-
-* Mon Dec  5 2011 Stanislav Ochotnicky <sochotnicky@redhat.com> - 2.3.1-4
-- Fixes for pure maven 3 build without maven 2 in buildroot
-- Guideline fixes
-
-* Fri Jun 3 2011 Alexander Kurtakov <akurtako@redhat.com> 2.3.1-3
-- Build with maven v3.
-- Guidelines fixes.
-
-* Tue Feb 08 2011 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 2.3.1-2
-- Rebuilt for https://fedoraproject.org/wiki/Fedora_15_Mass_Rebuild
-
-* Thu Oct 14 2010 Alexander Kurtakov <akurtako@redhat.com> 2.3.1-1
-- Update to 2.3.1.
-- Install License.
-
-* Thu Sep 09 2010 Hui Wang <huwang@redhat.com> 2.3-8
-- Add pom.patch
-
-* Fri May 21 2010 Alexander Kurtakov <akurtako@redhat.com> 2.3-7
-- BR: plexus-digest.
-
-* Fri May 21 2010 Alexander Kurtakov <akurtako@redhat.com> 2.3-6
-- Requires: plexus-digest.
-
-* Wed May 19 2010 Hui Wang <huwang@redhat.com> - 2.3-5
-- Added missing BR : maven-shared-reporting-impl
-
-* Wed May 19 2010 Hui Wang <huwang@redhat.com> - 2.3-4
-- Added missing obsoletes/provides
-
-* Wed May 19 2010 Hui Wang <huwang@redhat.com> - 2.3-3
-- Added missing BR : maven-archiver
-
-* Mon May 17 2010 Hui Wang <huwang@redhat.com> - 2.3-2
-- Fixed install -pm 644 pom.xml
-
-* Fri May 14 2010 Hui Wang <huwang@redhat.com> - 2.3-1
-- Initial version of the package
+%doc LICENSE NOTICE README.md
